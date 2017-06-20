@@ -20,10 +20,42 @@ use \Symfony\Component\Filesystem\Filesystem;
 use \Symfony\Component\Filesystem\Exception\IOExceptionInterface;
 
 class FileUtil {
-
+	
+	/**
+	* Check that a dir from the config exists and try to build it if needed
+	* @param  {String}       directory to be checked/built
+	* @param  {String}       the config path
+	* @param  {String}       the config option that would help them
+	*/
+	public static function checkPathFromConfig($path, $configPath, $configOption = "") {
+		
+		if (!isset($path)) {
+			Console::writeError("please make sure ".$configOption." is set in <path>".Console::getHumanReadablePath($configPath)."</path> by adding '".$configOption."=some/path'. sorry, stopping pattern lab... :(");
+		} else if (!is_dir($path)) {
+			Console::writeWarning("i can't seem to find the directory <path>".Console::getHumanReadablePath($path)."</path>...");
+			self::makeDir($path);
+			Console::writeWarning("i created <path>".Console::getHumanReadablePath($path)."</path> just in case. you can edit this in <path>".Console::getHumanReadablePath($configPath)."</path> by editing ".$configOption."...");
+		}
+		
+	}
+	
+	/**
+	* Make a directory
+	* @param  {String}       directory to be made
+	*/
+	public static function makeDir($dir) {
+		$fs = new Filesystem();
+		try {
+			$fs->mkdir($dir);
+		} catch (IOExceptionInterface $e) {
+			Console::writeError("an error occurred while creating your directory at <path>".$e->getPath()."</path>...");
+		}
+		unset($fs);
+	}
+	
 	/**
 	* Copies a file from the given source path to the given public path.
-	* THIS IS NOT FOR PATTERNS 
+	* THIS IS NOT FOR PATTERNS
 	* @param  {String}       the source file
 	* @param  {String}       the public file
 	*/
@@ -178,13 +210,13 @@ class FileUtil {
 		// scan source/ & public/ to figure out what directories might need to be cleaned up
 		$publicDir  = Config::getOption("publicDir");
 		$sourceDir  = Config::getOption("sourceDir");
-		$publicDirs = glob($publicDir."/*",GLOB_ONLYDIR);
-		$sourceDirs = glob($sourceDir."/*",GLOB_ONLYDIR);
+		$publicDirs = glob($publicDir.DIRECTORY_SEPARATOR."*",GLOB_ONLYDIR);
+		$sourceDirs = glob($sourceDir.DIRECTORY_SEPARATOR."*",GLOB_ONLYDIR);
 		
 		// make sure some directories aren't deleted
 		$ignoreDirs = array("styleguide","patternlab-components");
 		foreach ($ignoreDirs as $ignoreDir) {
-			$key = array_search($publicDir."/".$ignoreDir,$publicDirs);
+			$key = array_search($publicDir.DIRECTORY_SEPARATOR.$ignoreDir,$publicDirs);
 			if ($key !== false){
 				unset($publicDirs[$key]);
 			}
@@ -192,9 +224,9 @@ class FileUtil {
 		
 		// compare source dirs against public. remove those dirs w/ an underscore in source/ from the public/ list
 		foreach ($sourceDirs as $dir) {
-			$cleanDir = str_replace($sourceDir."/","",$dir);
+			$cleanDir = str_replace($sourceDir.DIRECTORY_SEPARATOR,"",$dir);
 			if ($cleanDir[0] == "_") {
-				$key = array_search($publicDir."/".str_replace("_","",$cleanDir),$publicDirs);
+				$key = array_search($publicDir.DIRECTORY_SEPARATOR.str_replace("_","",$cleanDir),$publicDirs);
 				if ($key !== false){
 					unset($publicDirs[$key]);
 				}

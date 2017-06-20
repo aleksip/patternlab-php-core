@@ -57,7 +57,7 @@ class PatternCodeHelper extends \PatternLab\PatternData\Helper {
 		// iterate to process each pattern
 		foreach ($store as $patternStoreKey => $patternStoreData) {
 			
-			if (($patternStoreData["category"] == "pattern") && !$patternStoreData["hidden"]) {
+			if (($patternStoreData["category"] == "pattern") && isset($patternStoreData["name"])) {
 				
 				$data = Data::getPatternSpecificData($patternStoreKey);
 				
@@ -81,13 +81,13 @@ class PatternCodeHelper extends \PatternLab\PatternData\Helper {
 				// set a default var
 				$exportClean                      = (isset($options["exportClean"])) ? $options["exportClean"] : false;
 				$data["patternLabHead"]           = (!$this->exportFiles) ? $stringLoader->render(array("string" => $htmlHead, "data" => array("cacheBuster" => $data["cacheBuster"]))) : "";
-				$data["patternLabFoot"]           = (!$this->exportFiles) ? $stringLoader->render(array("string" => $htmlFoot, "data" => array("cacheBuster" => $data["cacheBuster"], "patternData" => json_encode($patternData)))) : "";
+				$data["patternLabFoot"]           = (!$this->exportFiles) ? $stringLoader->render(array("string" => $htmlFoot, "data" => array("cacheBuster" => $data["cacheBuster"], "isPattern" => true, "patternData" => json_encode($patternData)))) : "";
 				
 				if (isset($patternStoreData["patternRaw"])) {
 					
-					$header  = (!$this->exportClean) ? $stringLoader->render(array("string" => $patternHead, "data" => $data)) : "";
+					$header  = (!$this->exportClean) ? $patternLoader->render(array("pattern" => $patternHead, "data" => $data)) : "";
 					$code    = $patternLoader->render(array("pattern" => $patternStoreData["patternRaw"], "data" => $data));
-					$footer  = (!$this->exportClean) ? $stringLoader->render(array("string" => $patternFoot, "data" => $data)) : "";
+					$footer  = (!$this->exportClean) ? $patternLoader->render(array("pattern" => $patternFoot, "data" => $data)) : "";
 					
 					PatternData::setPatternOption($patternStoreKey,"header",$header);
 					PatternData::setPatternOption($patternStoreKey,"code",$code);

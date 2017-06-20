@@ -24,24 +24,6 @@ use \Symfony\Component\Filesystem\Exception\IOExceptionInterface;
 class Fetch {
 	
 	/**
-	 * Fetch a package using Composer
-	 * @param  {String}    the path to the package to be downloaded
-	 *
-	 * @return {String}    the modified file contents
-	 */
-	public function fetchPackage($package = "") {
-		
-		if (empty($package)) {
-			Console::writeError("please provide a path for the package before trying to fetch it...");
-		}
-
-		// run composer
-		$composerPath = Config::getOption("coreDir").DIRECTORY_SEPARATOR."bin/composer.phar";
-		passthru("php ".$composerPath." require ".$package);
-				
-	}
-		
-	/**
 	 * Fetch a package from GitHub
 	 * @param  {String}    the command option to provide the rule for
 	 * @param  {String}    the path to the package to be downloaded
@@ -49,7 +31,7 @@ class Fetch {
 	 * @return {String}    the modified file contents
 	 */
 	public function fetchStarterKit($starterkit = "") {
-
+		
 		// double-checks options was properly set
 		if (empty($starterkit)) {
 			Console::writeError("please provide a path for the starterkit before trying to fetch it...");
@@ -68,7 +50,7 @@ class Fetch {
 		//get the path to the GH repo and validate it
 		$tarballUrl = "https://github.com/".$org."/".$repo."/archive/".$tag.".tar.gz";
 		
-		Console::writeInfo("downloading the starterkit...");
+		Console::writeInfo("downloading the starterkit. this may take a few minutes...");
 		
 		// try to download the given package
 		if (!$package = @file_get_contents($tarballUrl)) {
@@ -91,15 +73,23 @@ class Fetch {
 		Console::writeInfo("finished downloading the starterkit...");
 		
 		// make sure the temp dir exists before copying into it
-		if (!is_dir($tempDirSK)) { 
-			mkdir($tempDirSK); 
+		if (!is_dir($tempDirSK)) {
+			mkdir($tempDirSK);
 		}
 		
 		// extract, if the zip is supposed to be unpacked do that (e.g. stripdir)
-		$zippy = Zippy::load();
-		$zippy->addStrategy(new UnpackFileStrategy());
-		$zippy->getAdapterFor('tar.gz')->open($tempFile)->extract($tempDirSK);
+		try {
+			$zippy = Zippy::load();
+			$zippy->addStrategy(new UnpackFileStrategy());
+			$zippy->getAdapterFor('tar.gz')->open($tempFile)->extract($tempDirSK);
+		} catch(\RuntimeException $e) {
+			Console::writeError("failed to extract the starterkit. easiest solution is to manually download it and copy <path>./dist</path to <path>./source/</path>...");
+		}
 		
+		if (!is_dir($tempDirDist)) {
+			// try without repo dir
+			$tempDirDist  = $tempDirSK.DIRECTORY_SEPARATOR."dist";
+		}
 		// thrown an error if temp/dist/ doesn't exist
 		if (!is_dir($tempDirDist)) {
 			Console::writeError("the starterkit needs to contain a dist/ directory before it can be installed...");
@@ -129,7 +119,7 @@ class Fetch {
 		Console::writeInfo("cleaning up the temp files...");
 		$fs = new Filesystem();
 		$fs->remove($tempFile);
-		$fs->remove($tempDir);
+		$fs->remove($tempDirSK);
 		
 		Console::writeInfo("the starterkit installation is complete...");
 		
@@ -173,13 +163,15 @@ class Fetch {
 		// set default vars
 		$fsOptions = array();
 		$emptyDir = true;
+		$validFiles = array("README",".gitkeep",".DS_Store","styleguide","patternlab-components");
 		
 		// see if the source directory is empty
 		if (is_dir($sourceDir)) {
 			$objects  = new \DirectoryIterator($sourceDir);
 			foreach ($objects as $object) {
-				if (!$object->isDot() && ($object->getFilename() != "README") && ($object->getFilename() != ".DS_Store")) {
+				if (!$object->isDot() && !in_array($object->getFilename(),$validFiles)) {
 					$emptyDir = false;
+					break;
 				}
 			}
 		}
@@ -189,7 +181,7 @@ class Fetch {
 			
 			$prompt    = "a starterkit is already installed. merge the new files with it or replace it?";
 			$options   = "M/r";
-			$input     = Console::promptInput($prompt,$options);
+			$input     = Console::promptInput($prompt,$options,"M");
 			$fsOptions = ($input == "r") ? array("delete" => true, "override" => true) : array("delete" => false, "override" => false);
 			
 		}
@@ -197,7 +189,7 @@ class Fetch {
 		// mirror dist to source
 		Console::writeInfo("installing the starterkit files...");
 		$fs = new Filesystem();
-		$fs->mirror($tempDirDist, $sourceDir, null, $options);
+		$fs->mirror($tempDirDist, $sourceDir, null, $fsOptions);
 		Console::writeInfo("starterkit files have been installed...");
 		
 	}

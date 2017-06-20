@@ -26,7 +26,7 @@ class PatternInfoListItemsRule extends \PatternLab\PatternData\Rule {
 		parent::__construct($options);
 		
 		$this->depthProp  = 3; // 3 means that depth won't be checked
-		$this->extProp    = "json||yaml";
+		$this->extProp    = "json||yaml||yml";
 		$this->isDirProp  = false;
 		$this->isFileProp = true;
 		$this->searchProp = ".listitems.";
@@ -39,22 +39,15 @@ class PatternInfoListItemsRule extends \PatternLab\PatternData\Rule {
 		// load default vars
 		$patternTypeDash = PatternData::getPatternTypeDash();
 		
-		// should this pattern get rendered?
-		$hidden          = ($name[0] == "_");
-		
 		// set-up the names, $name == foo.listitems.json
 		$pattern         = str_replace(".listitems.".$ext,"",$name); // foo
 		$patternDash     = $this->getPatternName($pattern,false);    // foo
 		$patternPartial  = $patternTypeDash."-".$patternDash;        // atoms-foo
 		
-		if (!$hidden) {
-			
-			$patternStoreData = array("category" => "pattern");
-			
-			$data = Data::getListItems($pathName,$ext);
-			$patternStoreData["listItems"] = $data;
-			
-		}
+		$patternStoreData = array("category" => "pattern");
+		
+		$data = Data::getListItems("_patterns/".$pathName,$ext);
+		$patternStoreData["listItems"] = $data;
 		
 		// create a key for the data store
 		$patternStoreKey = $patternPartial;

@@ -56,7 +56,7 @@ class Generator extends Builder {
 		$watchVerbose  = (isset($options["watchVerbose"]))  ? $options["watchVerbose"] : false;
 		
 		if ($noCacheBuster) {
-			Config::updateOption("cacheBuster",0);
+			Config::setOption("cacheBuster",0);
 		}
 		
 		// gather up all of the data to be used in patterns
@@ -155,50 +155,6 @@ class Generator extends Builder {
 		
 		// note the end of the operation
 		$dispatcherInstance->dispatch("generator.moveStaticEnd");
-		
-	}
-	
-	/**
-	* Randomly prints a saying after the generate is complete
-	*/
-	public function printSaying() {
-		
-		$randomNumber = rand(0,3);
-		$colors = array("ok","options","info","warning","error");
-		$color  = (isset($colors[$randomNumber])) ? $colors[$randomNumber] : "desc";
-		
-		$randomNumber = rand(0,60);
-		$sayings = array(
-		                   "have fun storming the castle",
-		                   "be well, do good work, and keep in touch",
-		                   "may the sun shine, all day long",
-		                   "smile :)",
-		                   "namaste",
-		                   "walk as if you are kissing the earth with your feet",
-		                   "to be beautiful means to be yourself",
-		                   "i was thinking of the immortal words of socrates, who said \"...i drank what?\"",
-		                   "let me take this moment to compliment you on your fashion sense, particularly your slippers",
-		                   "42",
-		                   "he who controls the spice controls the universe",
-		                   "the greatest thing you'll ever learn is just to love and be loved in return",
-		                   "nice wand",
-		                   "i don't have time for a grudge match with every poseur in a parka",
-		                   "han shot first",
-		                   "what we've got here is a failure to communicate",
-		                   "mama always said life was like a box of chocolates. you never know what you're gonna get",
-		                   "soylent green is people",
-		                   "a little word of advice, my friend. sometimes you gotta let those hard-to-reach chips go",
-		                   "shop smart. shop s-mart",
-		                   "klaatu barada nikto",
-		                   "(╯°□°）╯︵ ┻━┻",
-		                   "¸.·´¯`·.´¯`·.¸¸.·´¯`·.¸><(((º>",
-		                   "@}~}~~~",
-		                   "(>'.')> (>'.')> (>'.')> ",
-		                   "\(^-^)/"
-		                );
-		if (isset($sayings[$randomNumber])) {
-			Console::writeLine("<".$color.">".$sayings[$randomNumber]."...</".$color.">");
-		}
 		
 	}
 	

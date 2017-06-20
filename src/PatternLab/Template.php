@@ -6,7 +6,7 @@
  * Copyright (c) 2014 Dave Olsen, http://dmolsen.com
  * Licensed under the MIT license
  *
- * Set-ups the vars needed related to setting up and rendering templates. Meaning putting 
+ * Set-ups the vars needed related to setting up and rendering templates. Meaning putting
  *
  */
 
@@ -42,18 +42,24 @@ class Template {
 		
 		// set-up config vars
 		$patternExtension        = Config::getOption("patternExtension");
-		$pluginDir               = Config::getOption("packagesDir");
-		$sourceDir               = Config::getOption("sourceDir");
+		$metaDir                 = Config::getOption("metaDir");
 		$styleguideKit           = Config::getOption("styleguideKit");
+		$styleguideKitPath       = Config::getOption("styleguideKitPath");
+		
+		if (!$styleguideKitPath || !is_dir($styleguideKitPath)) {
+			Console::writeError("your styleguide won't render because i can't find your styleguide files. are you sure they're at <path>".Console::getHumanReadablePath($styleguideKitPath)."</path>? you can fix this in <path>./config/config.yml</path> by editing styleguideKitPath...");
+		}
 		
 		// load pattern-lab's resources
-		$partialPath             = $pluginDir."/".$styleguideKit."/views/partials";
-		self::$htmlHead          = file_get_contents($partialPath."/general-header.".$patternExtension);
-		self::$htmlFoot          = file_get_contents($partialPath."/general-footer.".$patternExtension);
+		$partialPath             = $styleguideKitPath.DIRECTORY_SEPARATOR."views".DIRECTORY_SEPARATOR."partials";
+		$generalHeaderPath       = $partialPath.DIRECTORY_SEPARATOR."general-header.".$patternExtension;
+		$generalFooterPath       = $partialPath.DIRECTORY_SEPARATOR."general-footer.".$patternExtension;
+		self::$htmlHead          = (file_exists($generalHeaderPath)) ? file_get_contents($generalHeaderPath) : "";
+		self::$htmlFoot          = (file_exists($generalFooterPath)) ? file_get_contents($generalFooterPath) : "";
 		
 		// gather the user-defined header and footer information
-		$patternHeadPath         = $sourceDir."/_meta/_00-head.".$patternExtension;
-		$patternFootPath         = $sourceDir."/_meta/_01-foot.".$patternExtension;
+		$patternHeadPath         = $metaDir.DIRECTORY_SEPARATOR."_00-head.".$patternExtension;
+		$patternFootPath         = $metaDir.DIRECTORY_SEPARATOR."_01-foot.".$patternExtension;
 		self::$patternHead       = (file_exists($patternHeadPath)) ? file_get_contents($patternHeadPath) : "";
 		self::$patternFoot       = (file_exists($patternFootPath)) ? file_get_contents($patternFootPath) : "";
 		
@@ -62,8 +68,8 @@ class Template {
 		$filesystemLoaderClass   = $patternEngineBasePath."\Loaders\FilesystemLoader";
 		
 		$options                 = array();
-		$options["templatePath"] = $pluginDir."/".$styleguideKit."/views";
-		$options["partialsPath"] = $pluginDir."/".$styleguideKit."/views/partials";
+		$options["templatePath"] = $styleguideKitPath.DIRECTORY_SEPARATOR."views";
+		$options["partialsPath"] = $options["templatePath"].DIRECTORY_SEPARATOR."partials";
 		
 		self::$filesystemLoader  = new $filesystemLoaderClass($options);
 		

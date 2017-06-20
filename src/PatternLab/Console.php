@@ -17,6 +17,7 @@ use \Colors\Color;
 use \PatternLab\Console\Event as ConsoleEvent;
 use \PatternLab\Dispatcher;
 use \PatternLab\Timer;
+use \Symfony\Component\Process\PhpExecutableFinder;
 
 class Console {
 	
@@ -56,6 +57,13 @@ class Console {
 		$colorTheme["warning"]  = "yellow";
 		$colorTheme["error"]    = "red";
 		$colorTheme["strong"]   = "bold";
+		$colorTheme["fire1"]    = "color[196]";
+		$colorTheme["fire2"]    = "color[202]";
+		$colorTheme["fire3"]    = "color[208]";
+		$colorTheme["fire4"]    = "color[214]";
+		$colorTheme["fire5"]    = "color[220]";
+		$colorTheme["fire6"]    = "color[226]";
+		$colorTheme["cool"]     = "color[19]";
 		self::$color->setTheme($colorTheme);
 		
 	}
@@ -154,6 +162,45 @@ class Console {
 			}
 		}
 		return false;
+	}
+	
+	/**
+	* Get the path to PHP binary
+	*
+	* @return {String}      the path to the PHP executable
+	*/
+	public static function getPathPHP() {
+		
+		$manualPHP = Config::getOption("phpBin");
+		$autoPHP   = new PhpExecutableFinder();
+		$path      = $manualPHP ? $manualPHP : $autoPHP->find();
+		
+		if (!$path) {
+			$configPath = Console::getHumanReadablePath(Config::getOption("configPath"));
+			$examplePHP = (DIRECTORY_SEPARATOR === "/") ? "C:\wamp\bin\php\php5.5.12" : "/opt/local/lib/php54";
+			Console::writeError("can't find PHP. add the path to PHP by adding the option \"phpBin\" to <path>".$configPath."</path>. it should look like \"phpBin\": \"".$examplePHP."\"");
+		}
+		
+		return $path;
+		
+	}
+	
+	/**
+	* Get the path to the calling script. Should be core/console but let's not make that assumption
+	*
+	* @return {String}      the path to the calling script
+	*/
+	public static function getPathConsole() {
+		
+		$console = isset($_SERVER["SCRIPT_NAME"]) ? $_SERVER["SCRIPT_NAME"] : Config::getOption("phpScriptName");
+		
+		if (!$console) {
+			$configPath = Console::getHumanReadablePath(Config::getOption("configPath"));
+			Console::writeError("please add the option `phpScriptName` with the path to your console option (e.g. core".DIRECTORY_SEPARATOR."console) to <path>".$configPath."</path> to run this process...");
+		}
+		
+		return Config::getOption("baseDir").$console;
+		
 	}
 	
 	/**
@@ -360,7 +407,8 @@ class Console {
 		$lengthLong = 0;
 		foreach ($commandOptions as $option => $attributes) {
 			$optionShort = (!empty($attributes["optionShort"][0]) && (($attributes["optionShort"][0] != "z") || ($attributes["optionShort"] != ""))) ? "|-".$attributes["optionShort"] : "";
-			$optionList .= "[--".$attributes["optionLong"].$optionShort."] ";
+			$optionExtra = (!empty($attributes["optionExtra"])) ? " ".$attributes["optionExtra"] : "";
+			$optionList .= "[--".$attributes["optionLong"].$optionShort.$optionExtra."] ";
 			$lengthLong = ($attributes["optionLongLength"] > $lengthLong) ? $attributes["optionLongLength"] : $lengthLong;
 		}
 		
@@ -375,7 +423,7 @@ class Console {
 		self::writeLine("");
 		self::writeLine("<h1>".$commandLongUC." Command Options</h1>",true,true);
 		self::writeLine("<h2>Usage</h2>:",true,true);
-		self::writeLine("  php ".self::$self." --".$commandLong.$commandShortInc." ".$commandExampleList.$optionList,true,true);
+		self::writeLine("  php ".self::$self." --".$commandLong.$commandShortInc." ".$optionList,true,true);
 		
 		// write out the available options
 		if (count($commandOptions) > 0) {
@@ -435,7 +483,7 @@ class Console {
 	* @return {String}        cleaned up path
 	*/
 	public static function getHumanReadablePath($path) {
-		return str_replace(Config::getOption("baseDir"), "./", $path);
+		return str_replace(Config::getOption("baseDir"), ".".DIRECTORY_SEPARATOR, $path);
 	}
 	
 	/**
@@ -468,6 +516,16 @@ class Console {
 	public static function writeInfo($line,$doubleSpace = false,$doubleBreak = false) {
 		$lineFinal = self::addTags($line,"info");
 		self::writeLine($lineFinal,$doubleSpace,$doubleBreak);
+	}
+	
+	/**
+	* Alias for writeInfo because I keep wanting to use it
+	* @param  {String}        the content to be written out
+	* @param  {Boolean}       if there should be two spaces added to the beginning of the line
+	* @param  {Boolean}       if there should be two breaks added to the end of the line
+	*/
+	public static function log($line,$doubleSpace = false,$doubleBreak = false) {
+		self::writeInfo($line,$doubleSpace = false,$doubleBreak = false);
 	}
 	
 	/**
@@ -514,12 +572,13 @@ class Console {
 	* Prompt the user for some input
 	* @param  {String}        the text for the prompt
 	* @param  {String}        the text for the options
+	* @param  {String}        the text for the default option
 	* @param  {Boolean}       if we should lowercase the input before sending it back
 	* @param  {String}        the tag that should be used when drawing the content
 	*
 	* @return {String}        trimmed input given by the user
 	*/
-	public static function promptInput($prompt = "", $options = "", $lowercase = true, $tag = "info") {
+	public static function promptInput($prompt = "", $options = "", $default = "", $lowercase = true, $tag = "info") {
 		
 		// check prompt
 		if (empty($prompt)) {
@@ -534,11 +593,20 @@ class Console {
 		// make sure no end-of-line is added
 		$prompt .= " <nophpeol>";
 		
-		// open the terminal and wait for feedback
-		$stdin = fopen("php://stdin", "r");
-		Console::writeTag($tag,$prompt);
-		$input = trim(fgets($stdin));
-		fclose($stdin);
+		// make sure we're not running in no interaction mode. if so just use the default for the input
+		if (InstallerUtil::$isInteractive) {
+			
+			// open the terminal and wait for feedback
+			$stdin = fopen("php://stdin", "r");
+			Console::writeTag($tag,$prompt);
+			$input = trim(fgets($stdin));
+			fclose($stdin);
+			
+		} else {
+			
+			$input = $default;
+			
+		}
 		
 		// check to see if it should be lowercased before sending back
 		return ($lowercase) ? strtolower($input) : $input;

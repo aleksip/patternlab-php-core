@@ -37,6 +37,7 @@ class LineageHelper extends \PatternLab\PatternData\Helper {
 		$foundLineages    = array();
 		$patternSourceDir = Config::getOption("patternSourceDir");
 		$patternExtension = Config::getOption("patternExtension");
+		$suffixRendered   =	Config::getOption("outputFileSuffixes.rendered");
 		
 		// check for the regular lineages in only normal patterns
 		$store = PatternData::get();
@@ -55,13 +56,13 @@ class LineageHelper extends \PatternLab\PatternData\Helper {
 						if (PatternData::getOption($lineage)) {
 							
 							$patternLineages[] = array("lineagePattern" => $lineage,
-													   "lineagePath"    => "../../patterns/".$patternStoreData["pathDash"]."/".$patternStoreData["pathDash"].".html");
+													   "lineagePath"    => "../../patterns/".$patternStoreData["pathDash"]."/".$patternStoreData["pathDash"].$suffixRendered.".html");
 							
 						} else {
 							
 							if (strpos($lineage, '/') === false) {
 								$fileName = $patternStoreData["pathName"].".".$patternExtension;
-								Console::writeWarning("you may have a typo in ".$fileName.". {{> ".$lineage." }} is not a valid pattern...");
+								Console::writeWarning("you may have a typo in ".$fileName.". `".$lineage."` is not a valid pattern...");
 							}
 							
 						}
@@ -95,7 +96,7 @@ class LineageHelper extends \PatternLab\PatternData\Helper {
 		$store = PatternData::get();
 		foreach ($store as $patternStoreKey => $patternStoreData) {
 			
-			if (($patternStoreData["category"] == "pattern") && (!isset($patternStoreData["pseudo"]))) {
+			if (($patternStoreData["category"] == "pattern") && (!isset($patternStoreData["pseudo"])) && isset($patternStoreData["partial"])) {
 				
 				$patternLineagesR = array();
 				
@@ -123,8 +124,8 @@ class LineageHelper extends \PatternLab\PatternData\Helper {
 									if (PatternData::getOption($haystackKey)) {
 										
 										$path = PatternData::getPatternOption($haystackKey,"pathDash");
-										$patternLineagesR[] = array("lineagePattern" => $haystackKey, 
-																	"lineagePath"    => "../../patterns/".$path."/".$path.".html");
+										$patternLineagesR[] = array("lineagePattern" => $haystackKey,
+																	"lineagePath"    => "../../patterns/".$path."/".$path.$suffixRendered.".html");
 																
 									}
 								

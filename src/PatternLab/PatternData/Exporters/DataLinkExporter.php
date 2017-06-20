@@ -18,21 +18,26 @@ use \PatternLab\Timer;
 
 class DataLinkExporter extends \PatternLab\PatternData\Exporter {
 	
+	protected $store;
+	
 	public function __construct($options = array()) {
 		
 		parent::__construct($options);
+		
+		$this->store = PatternData::get();
 		
 	}
 	
 	public function run() {
 		
-		$store = PatternData::get();
-		foreach ($store as $patternStoreKey => $patternStoreData) {
+		foreach ($this->store as $patternStoreKey => $patternStoreData) {
 			
 			if ($patternStoreData["category"] == "pattern") {
 				
-				$value = "../../".$patternStoreData["pathDash"]."/".$patternStoreData["pathDash"].".html";
-				Data::setOptionLink($patternStoreKey, $value);
+				if (isset($patternStoreData["pathDash"])) {
+					$value = "../../patterns/".$patternStoreData["pathDash"]."/".$patternStoreData["pathDash"].".html";
+					Data::setOptionLink($patternStoreKey, $value);
+				}
 				
 			}
 			

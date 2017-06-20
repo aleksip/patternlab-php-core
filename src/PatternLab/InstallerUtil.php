@@ -14,12 +14,15 @@ namespace PatternLab;
 
 use \PatternLab\Config;
 use \PatternLab\Console;
+use \PatternLab\FileUtil;
 use \PatternLab\Timer;
 use \Symfony\Component\Filesystem\Filesystem;
 use \Symfony\Component\Filesystem\Exception\IOExceptionInterface;
 use \Symfony\Component\Finder\Finder;
 
 class InstallerUtil {
+	
+	public static $isInteractive;
 	
 	/**
 	 * Move the component files from the package to their location in the patternlab-components dir
@@ -59,8 +62,122 @@ class InstallerUtil {
 		$baseDir = __DIR__."/../../../../../";
 		Config::init($baseDir,false);
 		
+		// make sure the source dir is set-up
+		$sourceDir = Config::getOption("sourceDir");
+		if (!is_dir($sourceDir)) {
+			FileUtil::makeDir($sourceDir);
+		}
+		
+		// make sure the public dir is set-up
+		$publicDir = Config::getOption("publicDir");
+		if (!is_dir($publicDir)) {
+			FileUtil::makeDir($publicDir);
+		}
+		
 		Dispatcher::init();
 		
+	}
+	
+	/**
+	* Include StarterKit in an array_filter
+	*/
+	public static function includeStarterKit($var) {
+		
+		$result = ($var["type"] == "patternlab-starterkit");
+		return $result;
+		
+	}
+	
+	/**
+	* Exclude StarterKit in an array_filter
+	*/
+	public static function excludeStarterKit($var) {
+		
+		$result = ($var["type"] != "patternlab-starterkit");
+		return $result;
+		
+	}
+	
+	/**
+	 * Extract the classes in the given file.
+	 *
+	 * This method taken from Symfony ClassLoader component.
+	 *
+	 * @see \Symfony\Component\ClassLoader\ClassMapGenerator::findClasses()
+	 * @license http://symfony.com/doc/current/contributing/code/license.html MIT license
+	 *
+	 * @param string $path The file to check
+	 *
+	 * @return array The found classes
+	 */
+	private static function findClasses($path) {
+		
+		$contents = file_get_contents($path);
+		$tokens = token_get_all($contents);
+		
+		$classes = array();
+		
+		$namespace = '';
+		for ($i = 0; isset($tokens[$i]); ++$i) {
+			$token = $tokens[$i];
+			
+			if (!isset($token[1])) {
+				continue;
+			}
+			
+			$class = '';
+			
+			switch ($token[0]) {
+				case T_NAMESPACE:
+					$namespace = '';
+					// If there is a namespace, extract it
+					while (isset($tokens[++$i][1])) {
+						if (in_array($tokens[$i][0], array(T_STRING, T_NS_SEPARATOR))) {
+							$namespace .= $tokens[$i][1];
+						}
+					}
+					$namespace .= '\\';
+					break;
+				case T_CLASS:
+				case T_INTERFACE:
+				case T_TRAIT:
+					// Skip usage of ::class constant
+					$isClassConstant = false;
+					for ($j = $i - 1; $j > 0; --$j) {
+						if (!isset($tokens[$j][1])) {
+							break;
+						}
+						
+						if (T_DOUBLE_COLON === $tokens[$j][0]) {
+							$isClassConstant = true;
+							break;
+						} elseif (!in_array($tokens[$j][0], array(T_WHITESPACE, T_DOC_COMMENT, T_COMMENT))) {
+							break;
+						}
+					}
+					
+					if ($isClassConstant) {
+						break;
+					}
+					
+					// Find the classname
+					while (isset($tokens[++$i][1])) {
+						$t = $tokens[$i];
+						if (T_STRING === $t[0]) {
+							$class .= $t[1];
+						} elseif ('' !== $class && T_WHITESPACE === $t[0]) {
+							break;
+						}
+					}
+					
+					$classes[] = ltrim($namespace.$class, '\\');
+					break;
+				default:
+					break;
+			}
+		}
+		
+		return $classes;
 	}
 	
 	/**
@@ -93,28 +210,28 @@ class InstallerUtil {
 		// foo/s.html ~ path/k.html -> mirror {srcroot}/foo/s.html to {destroot}/path/k.html
 		
 		if (($source == "*") && ($destination == "*")) {
-			$result  = self::pathExists($packageName, $destinationBase."/");
+			$result  = self::pathExists($packageName, $destinationBase.DIRECTORY_SEPARATOR);
 			$options = ($result) ? array("delete" => true, "override" => true) : array("delete" => false, "override" => false);
-			$fs->mirror($sourceBase, $destinationBase."/", null, $options);
+			$fs->mirror($sourceBase, $destinationBase.DIRECTORY_SEPARATOR, null, $options);
 		} else if ($source == "*") {
-			$result  = self::pathExists($packageName, $destinationBase."/".$destination);
+			$result  = self::pathExists($packageName, $destinationBase.DIRECTORY_SEPARATOR.$destination);
 			$options = ($result) ? array("delete" => true, "override" => true) : array("delete" => false, "override" => false);
-			$fs->mirror($sourceBase, $destinationBase."/".$destination, null, $options);
+			$fs->mirror($sourceBase, $destinationBase.DIRECTORY_SEPARATOR.$destination, null, $options);
 		} else if ($source[strlen($source)-1] == "*") {
 			$source  = rtrim($source,"/*");
-			$result  = self::pathExists($packageName, $destinationBase."/".$destination);
+			$result  = self::pathExists($packageName, $destinationBase.DIRECTORY_SEPARATOR.$destination);
 			$options = ($result) ? array("delete" => true, "override" => true) : array("delete" => false, "override" => false);
-			$fs->mirror($sourceBase.$source, $destinationBase."/".$destination, null, $options);
+			$fs->mirror($sourceBase.$source, $destinationBase.DIRECTORY_SEPARATOR.$destination, null, $options);
 		} else {
-			$pathInfo       = explode("/",$destination);
+			$pathInfo       = explode(DIRECTORY_SEPARATOR,$destination);
 			$file           = array_pop($pathInfo);
-			$destinationDir = implode("/",$pathInfo);
-			if (!$fs->exists($destinationBase."/".$destinationDir)) {
-				$fs->mkdir($destinationBase."/".$destinationDir);
+			$destinationDir = implode(DIRECTORY_SEPARATOR,$pathInfo);
+			if (!$fs->exists($destinationBase.DIRECTORY_SEPARATOR.$destinationDir)) {
+				$fs->mkdir($destinationBase.DIRECTORY_SEPARATOR.$destinationDir);
 			}
-			$result   = self::pathExists($packageName, $destinationBase."/".$destination);
+			$result   = self::pathExists($packageName, $destinationBase.DIRECTORY_SEPARATOR.$destination);
 			$override = ($result) ? true : false;
-			$fs->copy($sourceBase.$source, $destinationBase."/".$destination, $override);
+			$fs->copy($sourceBase.$source, $destinationBase.DIRECTORY_SEPARATOR.$destination, $override);
 		}
 		
 	}
@@ -187,7 +304,7 @@ class InstallerUtil {
 	protected static function parseComponentList($packageName,$sourceBase,$destinationBase,$componentFileList,$templateExtension,$onready,$callback) {
 		
 		/*
-		iterate over a source or source dirs and copy files into the componentdir. 
+		iterate over a source or source dirs and copy files into the componentdir.
 		use file extensions to add them to the appropriate type arrays below. so...
 			"patternlab": {
 				"dist": {
@@ -232,16 +349,17 @@ class InstallerUtil {
 				// iterate over the returned objects
 				foreach ($finder as $file) {
 					
-					$ext = $file->getExtension();
+					$ext      = $file->getExtension();
+					$pathName = $file->getPathname();
 					
 					if ($ext == "css") {
-						$componentTypes["stylesheets"][] = str_replace($sourceBase.$source,$destination,$file->getPathname());
+						$componentTypes["stylesheets"][] = str_replace(DIRECTORY_SEPARATOR,"/",str_replace($sourceBase.$source,$destination,$pathName));
 					} else if ($ext == "js") {
-						$componentTypes["javascripts"][] = str_replace($sourceBase.$source,$destination,$file->getPathname());
+						$componentTypes["javascripts"][] = str_replace(DIRECTORY_SEPARATOR,"/",str_replace($sourceBase.$source,$destination,$pathName));
 					} else if ($ext == $templateExtension) {
-						$componentTypes["templates"][]   = str_replace($sourceBase.$source,$destination,$file->getPathname());
+						$componentTypes["templates"][]   = str_replace(DIRECTORY_SEPARATOR,"/",str_replace($sourceBase.$source,$destination,$pathName));
 					}
-				
+					
 				}
 				
 			} else {
@@ -351,7 +469,7 @@ class InstallerUtil {
 				// see if the directory is essentially empty
 				$files = scandir($path);
 				foreach ($files as $key => $file) {
-					$ignore = array("..",".",".gitkeep","README",".DS_Store");
+					$ignore = array("..",".",".gitkeep","README",".DS_Store","patternlab-components");
 					$file = explode("/",$file);
 					if (in_array($file[count($file)-1],$ignore)) {
 						unset($files[$key]);
@@ -369,7 +487,7 @@ class InstallerUtil {
 				// prompt for input using the supplied query
 				$prompt  = "the path <path>".$humanReadablePath."</path> already exists. merge or replace with the contents of <path>".$packageName."</path> package?";
 				$options = "M/r";
-				$input   = Console::promptInput($prompt,$options);
+				$input   = Console::promptInput($prompt,$options,"M");
 				
 				if ($input == "m") {
 					Console::writeTag("ok","contents of <path>".$humanReadablePath."</path> have been merged with the package's content...", false, true);
@@ -390,145 +508,59 @@ class InstallerUtil {
 	}
 	
 	/**
-	 * Run the PL tasks when a package is installed
+	 * Run the PL tasks when Composer runs an install command
+	 * @param  {Array}      collected package info
 	 * @param  {Object}     a script event object from composer
 	 */
-	public static function postPackageInstall($event) {
+	public static function postInstallCmd($installerInfo, $event) {
 		
-		// run the console and config inits
-		self::init();
-		
-		// run the tasks based on what's in the extra dir
-		self::runTasks($event,"install");
+		self::packagesInstall($installerInfo, $event);
 		
 	}
 	
 	/**
-	 * Run the PL tasks when a package is updated
+	 * Run the PL tasks when Composer runs an update command. this also runs after a package is removed.
+	 * @param  {Array}      collected package info
 	 * @param  {Object}     a script event object from composer
 	 */
-	public static function postPackageUpdate($event) {
+	public static function postUpdateCmd($installerInfo, $event) {
 		
-		// run the console and config inits
-		self::init();
-		
-		self::runTasks($event,"update");
+		if (!$installerInfo["packagesRemove"]) {
+			self::packagesInstall($installerInfo, $event);
+		}
 		
 	}
 	
 	/**
-	 * Ask questions after the create package is done
-	 * @param  {Object}     a script event object from composer
+	 * Prompt the user to install a starterkit
+	 * @param  {Array}     the starterkit suggestions
 	 */
-	public static function postCreateProjectCmd($event) {
+	protected static function promptStarterKitInstall($starterKitSuggestions) {
 		
-		// see if there is an extra component
-		$extra = $event->getComposer()->getPackage()->getExtra();
+		Console::writeLine("");
 		
-		if (isset($extra["patternlab"])) {
+		// suggest starterkits
+		Console::writeInfo("suggested starterkits that work with this edition:", false, true);
+		foreach ($starterKitSuggestions as $i => $suggestion) {
+			$num = $i + 1;
+			Console::writeLine($num.": ".$suggestion, true);
+		}
+		
+		// prompt for input on the suggestions
+		Console::writeLine("");
+		
+		$prompt  = "choose an option or hit return to skip:";
+		$options = "(ex. 1)";
+		$input   = Console::promptInput($prompt,$options,"1");
+		$result  = (int)$input - 1;
+		
+		if (isset($starterKitSuggestions[$result])) {
 			
-			self::init();
 			Console::writeLine("");
-			
-			// see if we have any starterkits to suggest
-			if (isset($extra["patternlab"]["starterKitSuggestions"]) && is_array($extra["patternlab"]["starterKitSuggestions"])) {
-				
-				$suggestions = $extra["patternlab"]["starterKitSuggestions"];
-				
-				// suggest starterkits
-				Console::writeInfo("suggested starterkits that work with this edition:", false, true);
-				foreach ($suggestions as $i => $suggestion) {
-					
-					// write each suggestion
-					$num = $i + 1;
-					Console::writeLine($num.": ".$suggestion, true);
-					
-				}
-				
-				// prompt for input on the suggestions
-				Console::writeLine("");
-				$prompt  = "choose an option or hit return to skip:";
-				$options = "(ex. 1)";
-				$input   = Console::promptInput($prompt,$options);
-				$result  = (int)$input - 1;
-				
-				if (isset($suggestions[$result])) {
-					
-					Console::writeLine("");
-					$f = new Fetch();
-					$result = $f->fetchStarterKit($suggestions[$result]);
-					
-					if ($result) {
-						
-						Console::writeLine("");
-						$g = new Generator();
-						$g->generate(array("foo" => "bar"));
-						
-						Console::writeLine("");
-						Console::writeInfo("type <desc>php core/console --server</desc> to start the built-in server and see Pattern Lab...", false, true);
-						
-					}
-					
-				} else {
-					
-					Console::writeWarning("you will need to install a StarterKit before using Pattern Lab...");
-					
-				}
-				
-			}
+			$f = new Fetch();
+			$result = $f->fetchStarterKit($starterKitSuggestions[$result]);
 			
 		}
-		
-	}
-	
-	/**
-	 * Make sure certain things are set-up before running the installation of a package
-	 * @param  {Object}     a script event object from composer
-	 */
-	public static function preInstallCmd($event) {
-		
-		// run the console and config inits
-		self::init();
-		
-		// default vars
-		$sourceDir   = Config::getOption("sourceDir");
-		$packagesDir = Config::getOption("packagesDir");
-		
-		// check directories
-		if (!is_dir($sourceDir)) {
-			mkdir($sourceDir);
-		}
-		
-		if (!is_dir($packagesDir)) {
-			mkdir($packagesDir);
-		}
-		
-	}
-	
-	/**
-	 * Make sure pattern engines and listeners are removed on uninstall
-	 * @param  {Object}     a script event object from composer
-	 */
-	public static function prePackageUninstallCmd($event) {
-		
-		// run the console and config inits
-		self::init();
-		
-		// get package info
-		$package   = $event->getOperation()->getPackage();
-		$type      = $package->getType();
-		$name      = $package->getName();
-		$pathBase  = Config::getOption("packagesDir")."/".$name;
-		
-		// see if the package has a listener and remove it
-		self::scanForListener($pathBase,true);
-		
-		// see if the package is a pattern engine and remove the rule
-		if ($type == "patternlab-patternengine") {
-			self::scanForPatternEngineRule($pathBase,true);
-		}
-		
-		// go over .json in patternlab-components/, remove references to packagename
 		
 	}
 	
@@ -549,40 +581,104 @@ class InstallerUtil {
 	}
 	
 	/**
-	 * Handle some Pattern Lab specific tasks based on what's found in the package's composer.json file
-	 * @param  {Object}     a script event object from composer
-	 * @param  {String}     the type of event starting the runTasks command
+	 * Handle some Pattern Lab specific tasks based on what's found in the package's composer.json file on install
+	 * @param  {Array}      the info culled from installing various pattern lab-related packages
 	 */
-	protected static function runTasks($event,$type) {
+	protected static function packagesInstall($installerInfo, $event) {
 		
-		// get package info
-		$package   = ($type == "install") ? $event->getOperation()->getPackage() : $event->getOperation()->getTargetPackage();
-		$extra     = $package->getExtra();
-		$type      = $package->getType();
-		$name      = $package->getName();
-		$pathBase  = Config::getOption("packagesDir")."/".$name;
-		$pathDist  = $pathBase."/dist/";
+		// mark if this is an interactive call or not
+		self::$isInteractive = $event->getIO()->isInteractive();
 		
-		// make sure we're only evaluating pattern lab packages
-		if (strpos($type,"patternlab-") !== false) {
+		// initialize a bunch of stuff like config and console
+		self::init();
+		
+		// reorder packages so the starterkit is first if it's being installed as a package
+		if (isset($installerInfo["packages"])) {
 			
-			// make sure that it has the name-spaced section of data to be parsed. if it exists parse it
-			if (isset($extra["patternlab"])) {
-				self::parseComposerExtraList($extra["patternlab"], $name, $pathDist);
+			$packages = $installerInfo["packages"];
+			$packages = array_merge(array_filter($packages, "self::includeStarterKit"), array_filter($packages, "self::excludeStarterKit"));
+			
+			foreach ($packages as $package) {
+				
+				// set-up package info
+				$extra     = $package["extra"];
+				$type      = $package["type"];
+				$name      = $package["name"];
+				$pathBase  = $package["pathBase"];
+				$pathDist  = $package["pathDist"];
+				
+				// make sure that it has the name-spaced section of data to be parsed. if it exists parse it
+				if (!empty($extra)) {
+					self::parseComposerExtraList($extra, $name, $pathDist);
+				}
+				
+				// see if the package has a listener
+				self::scanForListener($pathBase);
+				
+				// address other specific needs based on type
+				if ($type == "patternlab-patternengine") {
+					self::scanForPatternEngineRule($pathBase);
+				} else if (($type == "patternlab-styleguidekit") && (strpos($name,"-assets-") === false)) {
+					$dir = str_replace(Config::getOption("baseDir"), "", $pathBase);
+					$dir = ($dir[strlen($dir)-1] == DIRECTORY_SEPARATOR) ? rtrim($dir, DIRECTORY_SEPARATOR) : $dir;
+					Config::updateConfigOption("styleguideKit",$name);
+					Config::updateConfigOption("styleguideKitPath",$dir);
+				}
+				
 			}
 			
-			// see if the package has a listener
-			self::scanForListener($pathBase);
-			
-			// address other specific needs based on type
-			if ($type == "patternlab-patternengine") {
-				self::scanForPatternEngineRule($pathBase);
-			} else if ($type == "patternlab-starterkit") {
-				Config::updateConfigOption("starterKit",$name);
-			} else if (($type == "patternlab-styleguidekit") && (strpos($name,"-assets-") === false)) {
-				Config::updateConfigOption("styleguideKit",$name);
+		}
+		
+		// make sure user is prompted to install starterkit
+		if (!empty($installerInfo["suggestedStarterKits"])) {
+			self::promptStarterKitInstall($installerInfo["suggestedStarterKits"]);
+		}
+		
+		// override any configs that have been set-up
+		if (!empty($installerInfo["configOverrides"])) {
+			foreach ($installerInfo["configOverrides"] as $option => $value) {
+				Config::updateConfigOption($option,$value, true); // forces the update
 			}
+		}
+		
+		if ($installerInfo["projectInstall"]) {
 			
+			Console::writeLine("");
+			Console::writeLine("<h1><fire3>Thank you for installing...</fire3></h1>", false, true);
+			Console::writeLine("<fire1>(                               (             </fire1>");
+			Console::writeLine("<fire2>)\ )        )   )               )\ )         )</fire2>");
+			Console::writeLine("<fire3>(()/(   ) ( /(( /(  (  (        (()/(    ) ( /(</fire3>");
+			Console::writeLine("<fire4>/(_)| /( )\())\())))\ )(   (    /(_))( /( )\())</fire4>");
+			Console::writeLine("<fire5>(</fire5><cool>_</cool><fire5>)) )(_)|</fire5><cool>_</cool><fire5>))(</fire5><cool>_</cool><fire5>))//((_|()\  )\ )(</fire5><cool>_</cool><fire5>))  )(_)|(_)\</fire5>");
+			Console::writeLine("<cool>| _ </cool><fire6>((</fire6><cool>_</cool><fire6>)</fire6><cool>_| |_| |_</cool><fire6>(</fire6><cool>_</cool><fire6>))  ((</fire6><cool>_</cool><fire6>)</fire6><cool>_</cool><fire6>(</fire6><cool>_</cool><fire6>/(</fire6><cool>| |  </cool><fire6>((</fire6><cool>_</cool><fire6>)</fire6><cool>_| |</cool><fire6>(</fire6><cool>_</cool><fire6>)</fire6>");
+			Console::writeLine("<cool>|  _/ _` |  _|  _/ -_)| '_| ' \</cool><fire6>))</fire6><cool> |__/ _` | '_ \  </cool>");
+			Console::writeLine("<cool>|_| \__,_|\__|\__\___||_| |_||_||____\__,_|_.__/  </cool>", false, true);
+
+		}
+		
+	}
+	
+	/**
+	 * Handle some Pattern Lab specific tasks based on what's found in the package's composer.json file on uninstall
+	 * @param  {Array}      the info culled from a pattern lab-related package that's being removed
+	 */
+	public static function packageRemove($packageInfo) {
+		
+		// run the console and config inits
+		self::init();
+		
+		// see if the package has a listener and remove it
+		self::scanForListener($packageInfo["pathBase"],true);
+		
+		// see if the package is a pattern engine and remove the rule
+		if ($packageInfo["type"] == "patternlab-patternengine") {
+			self::scanForPatternEngineRule($packageInfo["pathBase"],true);
+		}
+		
+		// remove the component package file if it exists
+		$jsonFile = Config::getOption("componentDir")."/packages/".str_replace("/","-",$packageInfo["name"]).".json";
+		if (file_exists($jsonFile)) {
+			unlink($jsonFile);
 		}
 		
 	}
@@ -594,7 +690,7 @@ class InstallerUtil {
 	protected static function scanForListener($pathPackage,$remove = false) {
 		
 		// get listener list path
-		$pathList = Config::getOption("packagesDir")."/listeners.json";
+		$pathList = Config::getOption("configDir")."/listeners.json";
 		
 		// make sure listeners.json exists. if not create it
 		if (!file_exists($pathList)) {
@@ -612,8 +708,8 @@ class InstallerUtil {
 		foreach ($finder as $file) {
 			
 			// create the name
-			$dirs         = explode("/",$file->getPath());
-			$listenerName = "\\".$dirs[count($dirs)-2]."\\".$dirs[count($dirs)-1]."\\".str_replace(".php","",$file->getFilename());
+			$classes      = self::findClasses($file->getPathname());
+			$listenerName = "\\".$classes[0];
 			
 			// check to see what we should do with the listener info
 			if (!$remove && !in_array($listenerName,$listenerList["listeners"])) {
@@ -637,7 +733,7 @@ class InstallerUtil {
 	protected static function scanForPatternEngineRule($pathPackage,$remove = false) {
 		
 		// get listener list path
-		$pathList = Config::getOption("packagesDir")."/patternengines.json";
+		$pathList = Config::getOption("configDir")."/patternengines.json";
 		
 		// make sure patternengines.json exists. if not create it
 		if (!file_exists($pathList)) {
@@ -654,9 +750,9 @@ class InstallerUtil {
 		// iterate over the returned objects
 		foreach ($finder as $file) {
 			
-			/// create the name
-			$dirs              = explode("/",$file->getPath());
-			$patternEngineName = "\\".$dirs[count($dirs)-3]."\\".$dirs[count($dirs)-2]."\\".$dirs[count($dirs)-1]."\\".str_replace(".php","",$file->getFilename());
+			// create the name
+			$classes           = self::findClasses($file->getPathname());
+			$patternEngineName = "\\".$classes[0];
 			
 			// check what we should do with the pattern engine info
 			if (!$remove && !in_array($patternEngineName, $patternEngineList["patternengines"])) {

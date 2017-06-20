@@ -35,7 +35,7 @@ class PatternStateHelper extends \PatternLab\PatternData\Helper {
 		$store = PatternData::get();
 		foreach ($store as $patternStoreKey => $patternStoreData) {
 			
-			if ($patternStoreData["category"] == "pattern") {
+			if (($patternStoreData["category"] == "pattern") && isset($patternStoreData["state"])) {
 				
 				$patternState = $patternStoreData["state"];
 				
@@ -112,7 +112,7 @@ class PatternStateHelper extends \PatternLab\PatternData\Helper {
 						$lineagePattern = $patternLineageInfo["lineagePattern"];
 						$patternState   = PatternData::getPatternOption($lineagePattern,"state");
 						if (($patternState != "") && ($patternState != null)) {
-							PatternData::setPatternSubOption($patternStoreKey,"lineages",$patternLineageKey,"lineageState",$patternState);
+							PatternData::setPatternSubOption($patternStoreKey,"lineagesR",$patternLineageKey,"lineageState",$patternState);
 						}
 						
 					}

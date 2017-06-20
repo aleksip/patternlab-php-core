@@ -19,9 +19,13 @@ use \PatternLab\Timer;
 
 class PatternPathSrcExporter extends \PatternLab\PatternData\Exporter {
 	
+	protected $store;
+	
 	public function __construct($options = array()) {
 		
 		parent::__construct($options);
+		
+		$this->store = PatternData::get();
 		
 	}
 	
@@ -29,10 +33,9 @@ class PatternPathSrcExporter extends \PatternLab\PatternData\Exporter {
 		
 		$patternPathDests = array();
 		
-		$store = PatternData::get();
-		foreach ($store as $patternStoreKey => $patternStoreData) {
+		foreach ($this->store as $patternStoreKey => $patternStoreData) {
 			
-			if (($patternStoreData["category"] == "pattern") && !$patternStoreData["hidden"]) {
+			if (($patternStoreData["category"] == "pattern") && isset($patternStoreData["nameDash"])) {
 				
 				$nameDash = $patternStoreData["nameDash"];
 				$typeDash = $patternStoreData["typeDash"];
@@ -41,7 +44,7 @@ class PatternPathSrcExporter extends \PatternLab\PatternData\Exporter {
 					$patternPathDests[$typeDash] = array();
 				}
 				
-				$patternPathDests[$typeDash][$nameDash] = $patternStoreData["pathName"];
+				$patternPathDests[$typeDash][$nameDash] = (isset($patternStoreData["pseudo"])) ? $patternStoreData["pathOrig"] : $patternStoreData["pathName"];
 				
 			}
 			

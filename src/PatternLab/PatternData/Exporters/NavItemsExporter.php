@@ -18,9 +18,15 @@ use \PatternLab\Timer;
 
 class NavItemsExporter extends \PatternLab\PatternData\Exporter {
 	
+	protected $store;
+	protected $styleGuideExcludes;
+	
 	public function __construct($options = array()) {
 		
 		parent::__construct($options);
+		
+		$this->store = PatternData::get();
+		$this->styleGuideExcludes = Config::getOption("styleGuideExcludes");
 		
 	}
 	
@@ -31,13 +37,13 @@ class NavItemsExporter extends \PatternLab\PatternData\Exporter {
 		$patternSubtypeSet        = false;
 		$patternType              = "";
 		$patternTypeDash          = "";
+		$suffixRendered           =	Config::getOption("outputFileSuffixes.rendered");
 		
 		$navItems                 = array();
 		$navItems["patternTypes"] = array();
 		
 		// iterate over the different categories and add them to the navigation
-		$store = PatternData::get();
-		foreach ($store as $patternStoreKey => $patternStoreData) {
+		foreach ($this->store as $patternStoreKey => $patternStoreData) {
 			
 			if ($patternStoreData["category"] == "patternType") {
 				
@@ -74,10 +80,10 @@ class NavItemsExporter extends \PatternLab\PatternData\Exporter {
 				
 			} else if ($patternStoreData["category"] == "pattern") {
 				
-				if (!$patternStoreData["hidden"]) {
+				if (isset($patternStoreData["hidden"]) && !$patternStoreData["hidden"]) {
 					
 					// set-up the info for the nav
-					$patternInfo = array("patternPath"    => $patternStoreData["pathDash"]."/".$patternStoreData["pathDash"].".html",
+					$patternInfo = array("patternPath"    => $patternStoreData["pathDash"]."/".$patternStoreData["pathDash"].$suffixRendered.".html",
 										 "patternSrcPath" => $patternStoreData["pathName"],
 										 "patternName"    => ucwords($patternStoreData["nameClean"]),
 										 "patternState"   => $patternStoreData["state"],
@@ -96,9 +102,6 @@ class NavItemsExporter extends \PatternLab\PatternData\Exporter {
 			
 		}
 		
-		// default vars
-		$styleGuideExcludes = Config::getOption("styleGuideExcludes");
-		
 		// review each subtype. add a view all link or remove the subtype as necessary
 		foreach ($navItems["patternTypes"] as $patternTypeKey => $patternTypeValues) {
 			
@@ -106,7 +109,7 @@ class NavItemsExporter extends \PatternLab\PatternData\Exporter {
 			$patternType     = $patternTypeValues["patternType"];
 			$patternTypeDash = $patternTypeValues["patternTypeDash"];
 			
-			if (!in_array($patternType,$styleGuideExcludes)) {
+			if (!in_array($patternType,$this->styleGuideExcludes)) {
 				
 				foreach ($patternTypeValues["patternTypeItems"] as $patternSubtypeKey => $patternSubtypeValues) {
 					
@@ -124,7 +127,7 @@ class NavItemsExporter extends \PatternLab\PatternData\Exporter {
 						
 						// add a view all link
 						$navItems["patternTypes"][$patternTypeKey]["patternTypeItems"][$patternSubtypeKey]["patternSubtypeItems"][$subItemsCount] = array(
-																												 "patternPath"    => $patternType."-".$patternSubtype."/index.html", 
+																												 "patternPath"    => $patternType."-".$patternSubtype."/index.html",
 																												 "patternName"    => "View All",
 																												 "patternType"    => $patternType,
 																												 "patternSubtype" => $patternSubtype,
@@ -144,7 +147,7 @@ class NavItemsExporter extends \PatternLab\PatternData\Exporter {
 			// add an overall view all link to the menus with sub-menus
 			if (!empty($navItems["patternTypes"][$patternTypeKey]["patternTypeItems"])) {
 				
-				$navItems["patternTypes"][$patternTypeKey]["patternItems"][] = array("patternPath"    => $patternType."/index.html", 
+				$navItems["patternTypes"][$patternTypeKey]["patternItems"][] = array("patternPath"    => $patternType."/index.html",
 																					 "patternName"    => "View All",
 																					 "patternType"    => $patternType,
 																					 "patternSubtype" => "all",

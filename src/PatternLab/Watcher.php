@@ -21,7 +21,9 @@ use \PatternLab\Builder;
 use \PatternLab\Config;
 use \PatternLab\Console;
 use \PatternLab\Data;
+use \PatternLab\Dispatcher;
 use \PatternLab\FileUtil;
+use \PatternLab\InstallerUtil;
 use \PatternLab\PatternData;
 use \PatternLab\Util;
 use \PatternLab\Timer;
@@ -61,16 +63,12 @@ class Watcher extends Builder {
 		// make sure a copy of the given options are saved for using when running generate
 		$this->options = $options;
 		
-		// automatically start the auto-refresh tool
-		// DEPRECATED
-		/*if ($reload) {
-			$path = str_replace("lib".DIRECTORY_SEPARATOR."PatternLab","autoReloadServer.php",__DIR__);
-			$fp = popen("php ".$path." -s", "r"); 
-			Console::writeLine("starting page auto-reload...");
-		}*/
+		// set-up the Dispatcher
+		$dispatcherInstance = Dispatcher::getInstance();
+		$dispatcherInstance->dispatch("watcher.start");
 		
 		if ($noCacheBuster) {
-			Config::updateOption("cacheBuster",0);
+			Config::setOption("cacheBuster",0);
 		}
 		
 		$c  = false;           // track that one loop through the pattern file listing has completed
@@ -82,10 +80,31 @@ class Watcher extends Builder {
 		Console::writeLine("watching your site for changes...");
 		
 		// default vars
-		$publicDir  = Config::getOption("publicDir");
-		$sourceDir  = Config::getOption("sourceDir");
-		$ignoreExts = Config::getOption("ie");
-		$ignoreDirs = Config::getOption("id");
+		$publicDir        = Config::getOption("publicDir");
+		$sourceDir        = Config::getOption("sourceDir");
+		$patternSourceDir = Config::getOption("patternSourceDir");
+		$ignoreExts       = Config::getOption("ie");
+		$ignoreDirs       = Config::getOption("id");
+		$patternExt       = Config::getOption("patternExtension");
+		
+		// build the file extensions based on the rules
+		$fileExtensions   = array();
+		$patternRules     = PatternData::getRules();
+		foreach ($patternRules as $patternRule) {
+			$extensions = $patternRule->getProp("extProp");
+			if (strpos($extensions,"&&") !== false) {
+				$extensions = explode("&&",$extensions);
+			} else if (strpos($extensions,"||") !== false) {
+				$extensions = explode("||",$extensions);
+			} else {
+				$extensions = array($extensions);
+			}
+			foreach ($extensions as $extension) {
+				if (!in_array($extension, $fileExtensions)) {
+					$fileExtensions[] = $extension;
+				}
+			}
+		}
 		
 		// run forever
 		while (true) {
@@ -94,7 +113,7 @@ class Watcher extends Builder {
 			$cp = clone $o->patterns;
 			
 			// iterate over the patterns & related data and regenerate the entire site if they've changed
-			$patternObjects  = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($sourceDir."/_patterns/"), \RecursiveIteratorIterator::SELF_FIRST);
+			$patternObjects  = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($patternSourceDir), \RecursiveIteratorIterator::SELF_FIRST);
 			
 			// make sure dots are skipped
 			$patternObjects->setFlags(\FilesystemIterator::SKIP_DOTS);
@@ -102,10 +121,10 @@ class Watcher extends Builder {
 			foreach($patternObjects as $name => $object) {
 				
 				// clean-up the file name and make sure it's not one of the pattern lab files or to be ignored
-				$fileName      = str_replace($sourceDir."/_patterns".DIRECTORY_SEPARATOR,"",$name);
+				$fileName      = str_replace($patternSourceDir.DIRECTORY_SEPARATOR,"",$name);
 				$fileNameClean = str_replace(DIRECTORY_SEPARATOR."_",DIRECTORY_SEPARATOR,$fileName);
 				
-				if ($object->isFile() && (($object->getExtension() == "mustache") || ($object->getExtension() == "json") || ($object->getExtension() == "md"))) {
+				if ($object->isFile() && in_array($object->getExtension(), $fileExtensions)) {
 					
 					// make sure this isn't a hidden pattern
 					$patternParts = explode(DIRECTORY_SEPARATOR,$fileName);
@@ -121,8 +140,8 @@ class Watcher extends Builder {
 						} else if (!isset($o->patterns->$fileName) && $c) {
 							$o->patterns->$fileName = $mt;
 							$this->updateSite($fileName,"added");
-							if ($object->getExtension() == "mustache") {
-								$patternSrcPath  = str_replace(".mustache","",$fileName);
+							if ($object->getExtension() == $patternExt) {
+								$patternSrcPath  = str_replace(".".$patternExt,"",$fileName);
 								$patternDestPath = str_replace("/","-",$patternSrcPath);
 								$render = ($pattern[0] != "_") ? true : false;
 								$this->patternPaths[$patternParts[0]][$pattern] = array("patternSrcPath" => $patternSrcPath, "patternDestPath" => $patternDestPath, "render" => $render);
@@ -167,10 +186,10 @@ class Watcher extends Builder {
 			}
 			
 			// iterate over annotations, data, meta and any other _ dirs
-			$watchDirs = glob($sourceDir."/_*",GLOB_ONLYDIR);
+			$watchDirs = glob($sourceDir.DIRECTORY_SEPARATOR."_*",GLOB_ONLYDIR);
 			foreach ($watchDirs as $watchDir) {
 				
-				if (str_replace($sourceDir."/","",$watchDir) != "_patterns") {
+				if ($watchDir != $patternSourceDir) {
 					
 					// iterate over the data files and regenerate the entire site if they've changed
 					$objects = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($watchDir), \RecursiveIteratorIterator::SELF_FIRST);
@@ -180,7 +199,7 @@ class Watcher extends Builder {
 					
 					foreach($objects as $name => $object) {
 						
-						$fileName = str_replace($sourceDir."/","",$name);
+						$fileName = str_replace($sourceDir.DIRECTORY_SEPARATOR,"",$name);
 						$mt = $object->getMTime();
 						
 						if (!isset($o->$fileName)) {
@@ -204,7 +223,7 @@ class Watcher extends Builder {
 			// iterate over all of the other files in the source directory and move them if their modified time has changed
 			if ($moveStatic) {
 				
-				$objects = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($sourceDir."/"), \RecursiveIteratorIterator::SELF_FIRST);
+				$objects = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($sourceDir.DIRECTORY_SEPARATOR), \RecursiveIteratorIterator::SELF_FIRST);
 				
 				// make sure dots are skipped
 				$objects->setFlags(\FilesystemIterator::SKIP_DOTS);
@@ -261,23 +280,10 @@ class Watcher extends Builder {
 			// taking out the garbage. basically killing mustache after each run.
 			if (gc_enabled()) gc_collect_cycles();
 			
-			// output anything the reload server might send our way
-			// DEPRECATED
-			/*
-			if ($reload) {
-				$output = fgets($fp, 100);
-				if ($output != "\n") print $output;
-			}
-			*/
-			
 			// pause for .05 seconds to give the CPU a rest
 			usleep(50000);
 			
 		}
-		
-		// close the auto-reload process, this shouldn't do anything
-		// DEPRECATED
-		// fclose($fp);
 		
 	}
 	
@@ -319,23 +325,28 @@ class Watcher extends Builder {
 		
 	}
 	
-	public function watchStarterKit() {
-			
-		// double-checks options was properly set
-		$starterKit = Config::getOption("starterKit");
-		if (!$starterKit) {
-			Console::writeError("need to have a starterkit set in the config...");
-		}
+	protected function starterKitPathPrompt() {
+		
+		// need to figure this out long-term
+		InstallerUtil::$isInteractive = true;
+		$input = Console::promptInput("Tell me the path to the starterkit you want to watch.","e.g. vendor/pattern-lab/starterkit-mustache-demo/dist","baz",false);
 		
 		// set-up the full starterkit path
-		$starterKitPath = Config::getOption("packagesDir").DIRECTORY_SEPARATOR.$starterKit.DIRECTORY_SEPARATOR."dist";
+		$starterKitPath = Config::getOption("baseDir").$input;
 		if (!is_dir($starterKitPath)) {
-			Console::writeError("the starterkit doesn't seem to exist...");
+			Console::writeWarning("that doesn't seem to be a real directory. let's try again...");
+			$starterKitPath = $this->starterKitPathPrompt();
 		}
 		
+		return $starterKitPath;
+		
+	}
+	
+	public function watchStarterKit() {
+		
 		// default vars
-		$sourceDir   = Config::getOption("sourceDir");
-		$packagesDir = Config::getOption("packagesDir");
+		$starterKitPath = $this->starterKitPathPrompt();
+		$sourceDir      = Config::getOption("sourceDir");
 		
 		$fs = new Filesystem();
 		

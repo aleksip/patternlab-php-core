@@ -19,9 +19,16 @@ use \PatternLab\Timer;
 
 class PatternPartialsExporter extends \PatternLab\PatternData\Exporter {
 	
+	protected $store;
+	protected $cacheBuster;
+	protected $styleGuideExcludes;
+	
 	public function __construct($options = array()) {
 		
 		parent::__construct($options);
+		$this->store       = PatternData::get();
+		$this->cacheBuster = Data::getOption("cacheBuster");
+		$this->styleGuideExcludes = Config::getOption("styleGuideExcludes");
 		
 	}
 	
@@ -37,20 +44,20 @@ class PatternPartialsExporter extends \PatternLab\PatternData\Exporter {
 		
 		// default vars
 		$patternPartials    = array();
-		$styleGuideExcludes = Config::getOption("styleGuideExcludes");
+		$suffixRendered     =	Config::getOption("outputFileSuffixes.rendered");
 		
-		$store = PatternData::get();
-		foreach ($store as $patternStoreKey => $patternStoreData) {
+		foreach ($this->store as $patternStoreKey => $patternStoreData) {
 			
-			if (($patternStoreData["category"] == "pattern") && (!$patternStoreData["hidden"]) && (!$patternStoreData["noviewall"]) && ($patternStoreData["depth"] == 2) && (!in_array($patternStoreData["type"],$styleGuideExcludes))) {
+			if (($patternStoreData["category"] == "pattern") && isset($patternStoreData["hidden"]) && (!$patternStoreData["hidden"]) && (!$patternStoreData["noviewall"]) && ($patternStoreData["depth"] > 1) && (!in_array($patternStoreData["type"],$this->styleGuideExcludes))) {
 				
 				if ((($patternStoreData["type"] == $type) && empty($subtype)) || (empty($type) && empty($subtype)) || (($patternStoreData["type"] == $type) && ($patternStoreData["subtype"] == $subtype))) {
 					
 					$patternPartialData                            = array();
-					$patternPartialData["patternName"]             = ucwords($patternStoreData["nameClean"]);
-					$patternPartialData["patternLink"]             = $patternStoreData["pathDash"]."/".$patternStoreData["pathDash"].".html";
+					$patternPartialData["patternName"]             = $patternStoreData["nameClean"];
+					$patternPartialData["patternLink"]             = $patternStoreData["pathDash"]."/".$patternStoreData["pathDash"].$suffixRendered.".html";
 					$patternPartialData["patternPartial"]          = $patternStoreData["partial"];
 					$patternPartialData["patternPartialCode"]      = $patternStoreData["code"];
+					$patternPartialData["patternState"]            = $patternStoreData["state"];
 					
 					$patternPartialData["patternLineageExists"]    = isset($patternStoreData["lineages"]);
 					$patternPartialData["patternLineages"]         = isset($patternStoreData["lineages"]) ? $patternStoreData["lineages"] : array();
@@ -64,21 +71,43 @@ class PatternPartialsExporter extends \PatternLab\PatternData\Exporter {
 					$patternPartialData["patternDescAdditions"]    = isset($patternStoreData["partialViewDescAdditions"]) ? $patternStoreData["partialViewDescAdditions"] : array();
 					$patternPartialData["patternExampleAdditions"] = isset($patternStoreData["partialViewExampleAdditions"]) ? $patternStoreData["partialViewExampleAdditions"] : array();
 					
-					//$patternPartialData["patternCSSExists"]        = Config::$options["enableCSS"];
-					$patternPartialData["patternCSSExists"]        = false;
+					// add the pattern data so it can be exported
+					$patternData                                   = array();
+					$patternData["lineage"]                        = isset($patternStoreData["lineages"])  ? $patternStoreData["lineages"] : array();
+					$patternData["lineageR"]                       = isset($patternStoreData["lineagesR"]) ? $patternStoreData["lineagesR"] : array();
+					$patternData["patternBreadcrumb"]              = $patternStoreData["breadcrumb"];
+					$patternData["patternDesc"]                    = (isset($patternStoreData["desc"])) ? $patternStoreData["desc"] : "";
+					$patternData["patternExtension"]               = Config::getOption("patternExtension");
+					$patternData["patternName"]                    = $patternStoreData["nameClean"];
+					$patternData["patternPartial"]                 = $patternStoreData["partial"];
+					$patternData["patternState"]                   = $patternStoreData["state"];
+					$patternPartialData["patternData"]             = json_encode($patternData);
 					
 					$patternPartials[]                             = $patternPartialData;
 				
+				}
+				
+			} else if (($patternStoreData["category"] == "patternSubtype") && (!in_array($patternStoreData["type"],$this->styleGuideExcludes))) {
+				
+				if ((($patternStoreData["type"] == $type) && empty($subtype)) || (empty($type) && empty($subtype)) || (($patternStoreData["type"] == $type) && ($patternStoreData["name"] == $subtype))) {
+					
+					$patternPartialData                            = array();
+					$patternPartialData["patternName"]             = $patternStoreData["nameClean"];
+					$patternPartialData["patternLink"]             = $patternStoreData["pathDash"]."/index.html";
+					$patternPartialData["patternPartial"]          = $patternStoreData["partial"];
+					$patternPartialData["patternSectionSubtype"]   = true;
+					$patternPartialData["patternDesc"]             = isset($patternStoreData["desc"]) ? $patternStoreData["desc"] : "";
+					
+					$patternPartials[] =  $patternPartialData;
+					
 				}
 				
 			}
 			
 		}
 		
-		return array("partials" => $patternPartials, "cacheBuster" => Data::getOption("cacheBuster"));
+		return array("partials" => $patternPartials, "cacheBuster" => $this->cacheBuster);
 		
 	}
 	
 }
-
-
